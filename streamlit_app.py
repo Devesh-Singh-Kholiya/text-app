@@ -1,11 +1,11 @@
+import streamlit as st
 import pytesseract
 from PIL import Image
 import docx
 import io
+from snowflake.snowpark.context import get_active_session
 
-# Set the path to the Tesseract OCR executable
-pytesseract.pytesseract.tesseract_cmd = r'C:\Users\dkholiya\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
-
+# Define OCR functions for images and Word documents
 def ocr_image_from_stage(session, stage_path):
     # Get the image file from the Snowflake stage
     image_data = session.file.get_stream(stage_path)
@@ -30,17 +30,28 @@ def ocr_word_from_stage(session, stage_path):
     text = '\n'.join([para.text for para in doc.paragraphs])
     return text
 
-# Example usage in Snowflake
-session = get_active_session()  # Get the active Snowflake session
+# Set up the Streamlit interface
+st.title("OCR Web Application")
+st.caption("Upload an image or Word document to perform OCR.")
 
-# Specify the paths to your files in the Snowflake stage
-image_stage_path = '@MY_STAGE/test_image.png'
-docx_stage_path = '@MY_STAGE/test_doc.docx'
+# Get the active Snowflake session
+session = get_active_session()
 
-# Perform OCR on the image and Word document
-image_text = ocr_image_from_stage(session, image_stage_path)
-word_text = ocr_word_from_stage(session, docx_stage_path)
+# File upload options
+uploaded_file = st.file_uploader("Choose an image or Word document", type=["png", "jpg", "jpeg", "docx"])
 
-# Print the extracted text
-print("Image Text:\n", image_text)
-print("\nWord Text:\n", word_text)
+if uploaded_file is not None:
+    # Save the uploaded file to Snowflake stage (optional, for future retrieval)
+    file_stage_path = f'@MY_STAGE/{uploaded_file.name}'
+    session.file.put_stream(file_stage_path, uploaded_file)
+    
+    # Determine file type and perform OCR
+    if uploaded_file.name.endswith(('.png', '.jpg', '.jpeg')):
+        st.write("Performing OCR on the uploaded image...")
+        image_text = ocr_image_from_stage(session, file_stage_path)
+        st.text_area("Extracted Text", value=image_text, height=200)
+    
+    elif uploaded_file.name.endswith('.docx'):
+        st.write("Performing OCR on the uploaded Word document...")
+        word_text = ocr_word_from_stage(session, file_stage_path)
+        st.text_area("Extracted Text", value=word_text, height=200)
